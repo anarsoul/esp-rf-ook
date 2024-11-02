@@ -81,8 +81,8 @@ fn main() {
     while ntp.get_sync_status() != SyncStatus::Completed {}
     info!("Time Sync Completed");
 
+    // Initialize MQTT
     let mqtt_config = MqttClientConfiguration::default();
-
     let broker_url = if !app_config.mqtt_user.is_empty() {
         format!(
             "mqtt://{}:{}@{}",
@@ -91,9 +91,10 @@ fn main() {
     } else {
         format!("mqtt://{}", app_config.mqtt_host)
     };
-
     info!("Broker URL: {}", broker_url);
 
+    // Pump MQTT events. Warn on errors, publish will panic on unwrap,
+    // but we'll have a chance to dump decoded data at least once
     let mut client =
         EspMqttClient::new_cb(
             &broker_url,
