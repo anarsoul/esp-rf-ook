@@ -60,7 +60,7 @@ impl std::fmt::Display for DecodeError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match *self {
             DecodeError::WrongPayloadLen(len) => write!(f, "Wrong payload len: {}", len),
-            DecodeError::SampleOutOfRange(sample) => write!(f, "Sample out of range: {}", sample)
+            DecodeError::SampleOutOfRange(sample) => write!(f, "Sample out of range: {}", sample),
         }
     }
 }
@@ -183,7 +183,7 @@ fn main() {
                                         decoded.as_bytes(),
                                     )
                                     .unwrap();
-                            },
+                            }
                             Err(why) => {
                                 warn!("Decode failed: {}", why);
                             }
