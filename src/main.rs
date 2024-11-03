@@ -26,7 +26,7 @@ const PAYLOAD_LEN: usize = 36;
 const MIN_HIGH: u64 = 1650;
 const MAX_HIGH: u64 = 2150;
 const MIN_LOW: u64 = 800;
-const MAX_LOW: u64 = 1000;
+const MAX_LOW: u64 = 1100;
 
 #[toml_cfg::toml_config]
 pub struct Config {
@@ -49,6 +49,20 @@ enum WaitingFor {
     Preamble,
     Pulse,
     Data,
+}
+
+enum DecodeError {
+    WrongPayloadLen(usize),
+    SampleOutOfRange(u64),
+}
+
+impl std::fmt::Display for DecodeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match *self {
+            DecodeError::WrongPayloadLen(len) => write!(f, "Wrong payload len: {}", len),
+            DecodeError::SampleOutOfRange(sample) => write!(f, "Sample out of range: {}", sample)
+        }
+    }
 }
 
 fn in_range(count: u64, min: u64, max: u64) -> bool {
@@ -157,17 +171,25 @@ fn main() {
             }
             WaitingFor::Data => {
                 if in_range(count, SIGNAL_END_MIN, SIGNAL_END_MAX) {
-                    if let Some(decoded) = decode(samples) {
-                        client
-                            .publish(
-                                app_config.mqtt_topic,
-                                QoS::AtMostOnce,
-                                false,
-                                decoded.as_bytes(),
-                            )
-                            .unwrap();
+                    // Don't attempt to decode if there is no samples
+                    if !samples.is_empty() {
+                        match decode(&samples) {
+                            Ok(decoded) => {
+                                client
+                                    .publish(
+                                        app_config.mqtt_topic,
+                                        QoS::AtMostOnce,
+                                        false,
+                                        decoded.as_bytes(),
+                                    )
+                                    .unwrap();
+                            },
+                            Err(why) => {
+                                warn!("Decode failed: {}", why);
+                            }
+                        }
+                        samples = Vec::new();
                     }
-                    samples = Vec::new();
                     WaitingFor::PulseIdle
                 } else if in_range(count, MIN_LOW, MAX_HIGH) {
                     samples.push(count);
@@ -182,7 +204,7 @@ fn main() {
     }
 }
 
-pub fn dump_samples(samples: &[u64]) {
+fn dump_samples(samples: &[u64]) {
     info!("!! BEGIN, {} samples", samples.len());
     for sample in samples {
         info!("{}", sample);
@@ -190,7 +212,7 @@ pub fn dump_samples(samples: &[u64]) {
     info!("!! END");
 }
 
-pub fn decode_range(samples: &[u64], start: usize, size: usize) -> u32 {
+fn decode_range(samples: &[u64], start: usize, size: usize) -> Result<u32, DecodeError> {
     let mut value: u32 = 0;
     for sample in &samples[start..start + size] {
         if in_range(*sample, MIN_HIGH, MAX_HIGH) {
@@ -199,19 +221,21 @@ pub fn decode_range(samples: &[u64], start: usize, size: usize) -> u32 {
         } else if in_range(*sample, MIN_LOW, MAX_LOW) {
             value <<= 1;
         } else {
-            panic!("Decoding failed")
+            warn!("Range: {} - {}", start, start + size);
+            dump_samples(samples);
+            return Err(DecodeError::SampleOutOfRange(*sample));
         }
     }
-    value
+    Ok(value)
 }
 
-pub fn decode(samples: Vec<u64>) -> Option<String> {
+fn decode(samples: &[u64]) -> Result<String, DecodeError> {
     // Currently we support only Nexus-TH which has 36 bit of payload
     if samples.len() != PAYLOAD_LEN {
-        return None;
+        return Err(DecodeError::WrongPayloadLen(samples.len()));
     }
 
-    let mut temp_10x: i32 = decode_range(&samples, 12, 12) as i32;
+    let mut temp_10x: i32 = decode_range(samples, 12, 12)? as i32;
     // Handle negative temp
     if temp_10x > 2048 {
         temp_10x = -(4096 - temp_10x);
@@ -219,14 +243,14 @@ pub fn decode(samples: Vec<u64>) -> Option<String> {
     let temp_int = temp_10x / 10;
     let temp_decimal = temp_10x % 10;
 
-    let mut humidity: i32 = decode_range(&samples, 28, 8) as i32;
+    let mut humidity: i32 = decode_range(samples, 28, 8)? as i32;
     // Clamp humidity
     if humidity > 100 {
         humidity = 100;
     }
-    let battery_ok: u8 = decode_range(&samples, 8, 1) as u8;
-    let channel: u8 = (decode_range(&samples, 10, 2) + 1) as u8;
-    let id: u8 = decode_range(&samples, 0, 8) as u8;
+    let battery_ok: u8 = decode_range(samples, 8, 1)? as u8;
+    let channel: u8 = (decode_range(samples, 10, 2)? + 1) as u8;
+    let id: u8 = decode_range(samples, 0, 8)? as u8;
 
     // Obtain System Time
     let st_now = SystemTime::now();
@@ -240,5 +264,5 @@ pub fn decode(samples: Vec<u64>) -> Option<String> {
         "Temp: {}.{}, humidity: {}, channel: {}, ID: {}, battery_ok: {}",
         temp_int, temp_decimal, humidity, channel, id, battery_ok
     );
-    Some(format!("{{\"time\" : \"{formatted}\", \"model\" : \"Nexus-TH\", \"id\" : {id}, \"channel\" : {channel}, \"battery_ok\" : {battery_ok}, \"temperature_C\" : {temp_int}.{temp_decimal}, \"humidity\" : {humidity} }}"))
+    Ok(format!("{{\"time\" : \"{formatted}\", \"model\" : \"Nexus-TH\", \"id\" : {id}, \"channel\" : {channel}, \"battery_ok\" : {battery_ok}, \"temperature_C\" : {temp_int}.{temp_decimal}, \"humidity\" : {humidity} }}"))
 }
