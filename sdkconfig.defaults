@@ -1,8 +1,9 @@
 # Rust often needs a bit of an extra main task stack size compared to C (the default is 3K)
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=16384
 
-# We are using busy-loop for sampling GPIO
-CONFIG_ESP_TASK_WDT_EN=n
+# We are using busy-loop for sampling GPIO, so idle task won't be running
+CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU0=n
+CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU1=n
 
 # Change default hostname
 CONFIG_LWIP_LOCAL_HOSTNAME="esp-rf-ook"

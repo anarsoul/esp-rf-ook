@@ -4,8 +4,8 @@
 use chrono::{DateTime, Utc};
 use embedded_svc::mqtt::client::{EventPayload::*, QoS};
 use esp_idf_hal::gpio::*;
-use esp_idf_hal::timer::config;
-use esp_idf_hal::timer::TimerDriver;
+use esp_idf_hal::timer::{config, TimerDriver};
+use esp_idf_hal::task::watchdog::{self, TWDTDriver, TWDTConfig};
 use esp_idf_svc::eventloop::EspSystemEventLoop;
 use esp_idf_svc::hal::prelude::Peripherals;
 use esp_idf_svc::mqtt::client::{EspMqttClient, MqttClientConfiguration};
@@ -120,6 +120,14 @@ fn main() {
         )
         .unwrap();
 
+    let twdt_config = TWDTConfig {
+        duration: core::time::Duration::from_secs(2),
+        panic_on_trigger: true,
+        subscribed_idle_tasks: enumset::EnumSet::empty(),
+    };
+    let mut twdt_driver = TWDTDriver::new(peripherals.twdt, &twdt_config).unwrap();
+    let mut sub = twdt_driver.watch_current_task().unwrap();
+
     let pin = PinDriver::input(peripherals.pins.gpio21).unwrap();
     let config = config::Config::new();
     let mut timer = TimerDriver::new(peripherals.timer00, &config).unwrap();
@@ -133,6 +141,8 @@ fn main() {
     let mut samples: Vec<u64> = Vec::new();
     let mut state = WaitingFor::PulseIdle;
     loop {
+        // Poke watchdog
+        sub.feed().unwrap();
         pin_current_level = pin.get_level();
 
         // Wait for edge

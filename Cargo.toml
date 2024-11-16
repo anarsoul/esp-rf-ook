@@ -37,6 +37,7 @@ toml-cfg = "0.2"
 wifi = { path = "./lib/wifi/" }
 embedded-svc = { version = "0.28" }
 chrono = { version = "0.4" }
+enumset = { version = "1.1" }
 
 [build-dependencies]
 embuild = "0.32.0"
