@@ -4,8 +4,8 @@
 use chrono::{DateTime, Utc};
 use embedded_svc::mqtt::client::{EventPayload::*, QoS};
 use esp_idf_hal::gpio::*;
+use esp_idf_hal::task::watchdog::{TWDTConfig, TWDTDriver};
 use esp_idf_hal::timer::{config, TimerDriver};
-use esp_idf_hal::task::watchdog::{self, TWDTDriver, TWDTConfig};
 use esp_idf_svc::eventloop::EspSystemEventLoop;
 use esp_idf_svc::hal::prelude::Peripherals;
 use esp_idf_svc::mqtt::client::{EspMqttClient, MqttClientConfiguration};
