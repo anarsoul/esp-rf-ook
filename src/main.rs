@@ -251,7 +251,7 @@ fn decode(samples: &[u64]) -> Result<String, DecodeError> {
         temp_10x = -(4096 - temp_10x);
     }
     let temp_int = temp_10x / 10;
-    let temp_decimal = temp_10x % 10;
+    let temp_decimal = temp_10x.abs() % 10;
 
     let mut humidity: i32 = decode_range(samples, 28, 8)? as i32;
     // Clamp humidity
