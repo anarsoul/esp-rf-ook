@@ -42,6 +42,8 @@ pub struct Config {
     wifi_ssid: &'static str,
     #[default("")]
     wifi_psk: &'static str,
+    #[default(1)]
+    channel: u8,
 }
 
 enum WaitingFor {
@@ -54,6 +56,7 @@ enum WaitingFor {
 enum DecodeError {
     WrongPayloadLen(usize),
     SampleOutOfRange(u64),
+    WrongChannel(u8),
 }
 
 impl std::fmt::Display for DecodeError {
@@ -61,6 +64,7 @@ impl std::fmt::Display for DecodeError {
         match *self {
             DecodeError::WrongPayloadLen(len) => write!(f, "Wrong payload len: {}", len),
             DecodeError::SampleOutOfRange(sample) => write!(f, "Sample out of range: {}", sample),
+            DecodeError::WrongChannel(ch) => write!(f, "Wrong channel: {}", ch),
         }
     }
 }
@@ -106,6 +110,7 @@ fn main() {
         format!("mqtt://{}", app_config.mqtt_host)
     };
     info!("Broker URL: {}", broker_url);
+    info!("Sensor channel: {}", app_config.channel);
 
     // Pump MQTT events. Warn on errors, publish will panic on unwrap,
     // but we'll have a chance to dump decoded data at least once
@@ -183,7 +188,7 @@ fn main() {
                 if in_range(count, SIGNAL_END_MIN, SIGNAL_END_MAX) {
                     // Don't attempt to decode if there is no samples
                     if !samples.is_empty() {
-                        match decode(&samples) {
+                        match decode(&samples, app_config.channel) {
                             Ok(decoded) => {
                                 client
                                     .publish(
@@ -239,7 +244,7 @@ fn decode_range(samples: &[u64], start: usize, size: usize) -> Result<u32, Decod
     Ok(value)
 }
 
-fn decode(samples: &[u64]) -> Result<String, DecodeError> {
+fn decode(samples: &[u64], channel_to_use: u8) -> Result<String, DecodeError> {
     // Currently we support only Nexus-TH which has 36 bit of payload
     if samples.len() != PAYLOAD_LEN {
         return Err(DecodeError::WrongPayloadLen(samples.len()));
@@ -274,5 +279,10 @@ fn decode(samples: &[u64]) -> Result<String, DecodeError> {
         "Temp: {}.{}, humidity: {}, channel: {}, ID: {}, battery_ok: {}",
         temp_int, temp_decimal, humidity, channel, id, battery_ok
     );
+
+    if channel != channel_to_use {
+        return Err(DecodeError::WrongChannel(channel));
+    }
+
     Ok(format!("{{\"time\" : \"{formatted}\", \"model\" : \"Nexus-TH\", \"id\" : {id}, \"channel\" : {channel}, \"battery_ok\" : {battery_ok}, \"temperature_C\" : {temp_int}.{temp_decimal}, \"humidity\" : {humidity} }}"))
 }

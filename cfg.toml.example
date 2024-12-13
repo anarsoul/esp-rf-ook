@@ -5,3 +5,4 @@ mqtt_host = "yourpc.local"
 mqtt_topic = "rtl_433/Nexus-TH"
 wifi_ssid = "FBI Surveillance Van"
 wifi_psk = "hunter2"
+channel = 1
