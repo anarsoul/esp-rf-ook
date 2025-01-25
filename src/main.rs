@@ -27,6 +27,7 @@ const MIN_HIGH: u64 = 1650;
 const MAX_HIGH: u64 = 2150;
 const MIN_LOW: u64 = 800;
 const MAX_LOW: u64 = 1100;
+const MAX_FAILED_DECODES: i32 = 10;
 
 #[toml_cfg::toml_config]
 pub struct Config {
@@ -84,6 +85,7 @@ fn main() {
     let sysloop = EspSystemEventLoop::take().unwrap();
 
     let app_config = CONFIG;
+    let mut failed_decodes = 0;
 
     let _wifi = wifi(
         app_config.wifi_ssid,
@@ -190,6 +192,7 @@ fn main() {
                     if !samples.is_empty() {
                         match decode(&samples, app_config.channel) {
                             Ok(decoded) => {
+                                failed_decodes = 0;
                                 client
                                     .publish(
                                         app_config.mqtt_topic,
@@ -201,6 +204,10 @@ fn main() {
                             }
                             Err(why) => {
                                 warn!("Decode failed: {}", why);
+                                failed_decodes += 1;
+                                if failed_decodes > MAX_FAILED_DECODES {
+                                    panic!("Reached max failed decodes: {}", MAX_FAILED_DECODES);
+                                }
                             }
                         }
                         samples = Vec::new();
