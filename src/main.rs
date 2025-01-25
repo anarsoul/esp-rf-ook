@@ -58,6 +58,7 @@ enum DecodeError {
     WrongPayloadLen(usize),
     SampleOutOfRange(u64),
     WrongChannel(u8),
+    TempOutOfRange(&'static str, i32),
 }
 
 impl std::fmt::Display for DecodeError {
@@ -66,6 +67,9 @@ impl std::fmt::Display for DecodeError {
             DecodeError::WrongPayloadLen(len) => write!(f, "Wrong payload len: {}", len),
             DecodeError::SampleOutOfRange(sample) => write!(f, "Sample out of range: {}", sample),
             DecodeError::WrongChannel(ch) => write!(f, "Wrong channel: {}", ch),
+            DecodeError::TempOutOfRange(sign, temp) => {
+                write!(f, "Temp out of range: {}{}", sign, temp)
+            }
         }
     }
 }
@@ -257,13 +261,19 @@ fn decode(samples: &[u64], channel_to_use: u8) -> Result<String, DecodeError> {
         return Err(DecodeError::WrongPayloadLen(samples.len()));
     }
 
+    let mut sign = "";
     let mut temp_10x: i32 = decode_range(samples, 12, 12)? as i32;
     // Handle negative temp
     if temp_10x > 2048 {
-        temp_10x = -(4096 - temp_10x);
+        sign = "-";
+        temp_10x = 4096 - temp_10x;
     }
     let temp_int = temp_10x / 10;
-    let temp_decimal = temp_10x.abs() % 10;
+    let temp_decimal = temp_10x % 10;
+
+    if !(0..60).contains(&temp_int) {
+        return Err(DecodeError::TempOutOfRange(sign, temp_int));
+    }
 
     let mut humidity: i32 = decode_range(samples, 28, 8)? as i32;
     // Clamp humidity
@@ -283,13 +293,13 @@ fn decode(samples: &[u64], channel_to_use: u8) -> Result<String, DecodeError> {
     // Print Time
     info!("{}", formatted);
     info!(
-        "Temp: {}.{}, humidity: {}, channel: {}, ID: {}, battery_ok: {}",
-        temp_int, temp_decimal, humidity, channel, id, battery_ok
+        "Temp: {}{}.{}, humidity: {}, channel: {}, ID: {}, battery_ok: {}",
+        sign, temp_int, temp_decimal, humidity, channel, id, battery_ok
     );
 
     if channel != channel_to_use {
         return Err(DecodeError::WrongChannel(channel));
     }
 
-    Ok(format!("{{\"time\" : \"{formatted}\", \"model\" : \"Nexus-TH\", \"id\" : {id}, \"channel\" : {channel}, \"battery_ok\" : {battery_ok}, \"temperature_C\" : {temp_int}.{temp_decimal}, \"humidity\" : {humidity} }}"))
+    Ok(format!("{{\"time\" : \"{formatted}\", \"model\" : \"Nexus-TH\", \"id\" : {id}, \"channel\" : {channel}, \"battery_ok\" : {battery_ok}, \"temperature_C\" : {sign}{temp_int}.{temp_decimal}, \"humidity\" : {humidity} }}"))
 }
