@@ -1,3 +1,5 @@
+**This repo is deprecated. Please use [esp-rf-ook2](https://github.com/anarsoul/esp-rf-ook2) instead**
+
 This is an app for ESP32 to decode the signal from Nexus-TH 433MHz thermal
 sensor.
 
